@@ -33,7 +33,13 @@ Ember.HasManyArray = Ember.ManyArray.extend({
         content = get(this, 'content'),
         reference = content.objectAt(idx),
         record;
-
+    if(this.polymorphic)
+    {
+      var subKlass = reference.model;
+      if(typeof subKlass === "string")
+        subKlass = Ember.get(subKlass);
+      klass = subKlass;
+    }
     if (reference.record) {
       record = reference.record;
     } else {

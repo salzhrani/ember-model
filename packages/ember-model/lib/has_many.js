@@ -5,7 +5,6 @@ Ember.hasMany = function(type, options) {
 
   var meta = { type: type, isRelationship: true, options: options, kind: 'hasMany' },
       key = options.key;
-
   return Ember.computed(function() {
     if (typeof type === "string") {
       type = Ember.get(Ember.lookup, type);
@@ -18,13 +17,15 @@ Ember.hasMany = function(type, options) {
 Ember.Model.reopen({
   getHasMany: function(key, type, meta) {
     var embedded = meta.options.embedded,
-        collectionClass = embedded ? Ember.EmbeddedHasManyArray : Ember.HasManyArray;
+        collectionClass = embedded ? Ember.EmbeddedHasManyArray : Ember.HasManyArray,
+        polymorphic = meta.options.polymorphic;
 
     var collection = collectionClass.create({
       parent: this,
       modelClass: type,
       content: this._getHasManyContent(key, type, embedded),
       embedded: embedded,
+      polymorphic: polymorphic,
       key: key
     });
 

@@ -332,7 +332,15 @@ Ember.Model = Ember.Object.extend(Ember.Evented, {
           return reference;
         };
       } else {
-        mapFunction = function(id) { return type._referenceForId(id); };
+        mapFunction = function(id) {
+          if(typeof id === "object")
+          {
+            var subKlass = type.adapter.findClassFor(id.type);
+            return Ember.get(subKlass)._referenceForId(id.id);
+          }
+          else
+            return type._referenceForId(id); 
+       };
       }
       content = Ember.EnumerableUtils.map(content, mapFunction);
     }
@@ -582,7 +590,8 @@ Ember.Model.reopenClass({
 
     var reference = {
       id: id,
-      clientId: this._clientIdCounter++
+      clientId: this._clientIdCounter++,
+      model : this.toString()
     };
 
     // if we're creating an item, this process will be done
