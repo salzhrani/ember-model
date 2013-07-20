@@ -319,28 +319,43 @@ Ember.Model = Ember.Object.extend(Ember.Evented, {
     }
   },
 
-  _getHasManyContent: function(key, type, embedded) {
+  _getHasManyContent: function(key, type, embedded, polymorphic) {
     var content = get(this, '_data.' + key);
 
     if (content) {
       var mapFunction, primaryKey, reference;
       if (embedded) {
         primaryKey = get(type, 'primaryKey');
-        mapFunction = function(attrs) {
-          reference = type._referenceForId(attrs[primaryKey]);
-          reference.data = attrs;
-          return reference;
-        };
+       if(polymorphic)
+        {
+          var adapter = this;
+          mapFunction = function(attrs) {
+             var subKlass = type.adapter.findClassFor(attrs.type);
+            reference = Ember.get(subKlass)._referenceForId(attrs[primaryKey]);
+            reference.data = attrs;
+            return reference;
+          };
+        }
+        else
+        {
+          mapFunction = function(attrs) {
+            reference = type._referenceForId(attrs[primaryKey]);
+            reference.data = attrs;
+            return reference;
+          };
+        }
       } else {
-        mapFunction = function(id) {
-          if(typeof id === "object")
-          {
+        if(polymorphic)
+        {
+          mapFunction = function(id) {
             var subKlass = type.adapter.findClassFor(id.type);
             return Ember.get(subKlass)._referenceForId(id.id);
-          }
-          else
-            return type._referenceForId(id); 
-       };
+         };
+       }
+       else
+       {
+         mapFunction = function(id) {  return type._referenceForId(id);  };
+       }
       }
       content = Ember.EnumerableUtils.map(content, mapFunction);
     }

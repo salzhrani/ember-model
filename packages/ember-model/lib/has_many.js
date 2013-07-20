@@ -23,7 +23,7 @@ Ember.Model.reopen({
     var collection = collectionClass.create({
       parent: this,
       modelClass: type,
-      content: this._getHasManyContent(key, type, embedded),
+      content: this._getHasManyContent(key, type, embedded, polymorphic),
       embedded: embedded,
       polymorphic: polymorphic,
       key: key

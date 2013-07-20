@@ -78,10 +78,16 @@ Ember.EmbeddedHasManyArray = Ember.ManyArray.extend({
         content = get(this, 'content'),
         reference = content.objectAt(idx),
         attrs = reference.data;
-
     if (reference.record) {
       return reference.record;
     } else {
+      if(this.polymorphic)
+      {
+        var subKlass = reference.model;
+        if(typeof subKlass === "string")
+          subKlass = Ember.get(subKlass);
+        klass = subKlass;
+      }
       var record = klass.create({ _reference: reference });
       reference.record = record;
       if (attrs) {
