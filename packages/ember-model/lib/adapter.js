@@ -5,7 +5,8 @@ function mustImplement(message) {
   fn.isUnimplemented = true;
   return fn;
 }
-
+var get = Ember.get,
+    set = Ember.set;
 Ember.Adapter = Ember.Object.extend({
   find: mustImplement('Ember.Adapter subclasses must implement find'),
   findQuery: mustImplement('Ember.Adapter subclasses must implement findQuery'),
@@ -19,20 +20,16 @@ Ember.Adapter = Ember.Object.extend({
     record.load(id, data);
   },
   setAlias : function(key, val) {
-    var configObj = this.get('configObj');
-    if(Ember.isEmpty(configObj))
+    var aliasMap = get(this,'aliasMap');
+    if (!aliasMap)
     {
-      configObj = {};
-      this.set('configObj',configObj);
+      aliasMap = {};
+      set(this, 'aliasMap', aliasMap);
     }
-    configObj[val]  = key;
+    aliasMap[key] = val;
   },
-  findClassFor : function(alias)
-  {
-    var configObj = this.get('configObj');
-    var rval = null;
-    if(!Ember.isEmpty(configObj[alias]))
-      rval = configObj[alias];
-    return rval;
+  findClassFor : function(alias) {
+    var aliasMap = get(this, 'aliasMap');
+    return aliasMap[alias];
   }
 });
