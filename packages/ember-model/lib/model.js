@@ -42,11 +42,17 @@ function extractDirty(object, attrsOrRelations, dirtyAttributes) {
     type = descMeta.type;
     dataType = Ember.Model.dataTypes[type];
 
+    if (descMeta.kind === 'belongsTo' && dataValue === undefined) {
+      dataValue = null;
+    }
+
     if (type && type.isEqual) {
       isDirty = !type.isEqual(dataValue, cachedValue);
     } else if (dataType && dataType.isEqual) {
       isDirty = !dataType.isEqual(dataValue, cachedValue);
     } else if (dataValue && cachedValue instanceof Ember.Model) { // belongsTo case
+      isDirty = get(cachedValue, 'isDirty');
+    } else if (dataValue === undefined && cachedValue instanceof Ember.ManyArray) { // hasMany case
       isDirty = get(cachedValue, 'isDirty');
     } else if (dataValue !== cachedValue) {
       isDirty = true;
@@ -371,26 +377,59 @@ Ember.Model.reopenClass({
 
   _clientIdCounter: 1,
 
-  fetch: function() {
-    return Ember.loadPromise(this.find.apply(this, arguments));
+  fetch: function(id) {
+    if (!arguments.length) {
+      return this._findFetchAll(true);
+    } else if (Ember.isArray(id)) {
+      return this._findFetchMany(id, true);
+    } else if (typeof id === 'object') {
+      return this._findFetchQuery(id, true);
+    } else {
+      return this._findFetchById(id, true);
+    }
   },
 
   find: function(id) {
     if (!arguments.length) {
-      return this.findAll();
+      return this._findFetchAll(false);
     } else if (Ember.isArray(id)) {
-      return this.findMany(id);
+      return this._findFetchMany(id, false);
     } else if (typeof id === 'object') {
-      return this.findQuery(id);
+      return this._findFetchQuery(id, false);
     } else {
-      return this.findById(id);
+      return this._findFetchById(id, false);
     }
   },
 
-  findMany: function(ids) {
-    Ember.assert("findMany requires an array", Ember.isArray(ids));
+  findQuery: function(params) {
+    return this._findFetchQuery(params, false);
+  },
 
-    var records = Ember.RecordArray.create({_ids: ids});
+  fetchQuery: function(params) {
+    return this._findFetchQuery(params, true);
+  },
+
+  _findFetchQuery: function(params, isFetch) {
+    var records = Ember.RecordArray.create();
+
+    var promise = this.adapter.findQuery(this, records, params);
+
+    return isFetch ? promise : records;
+  },
+
+  findMany: function(ids) {
+    return this._findFetchMany(ids, false);
+  },
+
+  fetchMany: function(ids) {
+    return this._findFetchMany(ids, true);
+  },
+
+  _findFetchMany: function(ids, isFetch) {
+    Ember.assert("findFetchMany requires an array", Ember.isArray(ids));
+
+    var records = Ember.RecordArray.create({_ids: ids}),
+        deferred;
 
     if (!this.recordArrays) { this.recordArrays = []; }
     this.recordArrays.push(records);
@@ -403,43 +442,89 @@ Ember.Model.reopenClass({
       this._currentBatchRecordArrays = [records];
     }
 
+    if (isFetch) {
+      deferred = Ember.Deferred.create();
+      Ember.set(deferred, 'resolveWith', records);
+
+      if (!this._currentBatchDeferreds) { this._currentBatchDeferreds = []; }
+      this._currentBatchDeferreds.push(deferred);
+    }
+
     Ember.run.scheduleOnce('data', this, this._executeBatch);
 
-    return records;
+    return isFetch ? deferred : records;
   },
 
   findAll: function() {
-    if (this._findAllRecordArray) { return this._findAllRecordArray; }
+    return this._findFetchAll(false);
+  },
+
+  fetchAll: function() {
+    return this._findFetchAll(true);
+  },
+
+  _findFetchAll: function(isFetch) {
+    var self = this;
+
+    if (this._findAllRecordArray) { 
+      if (isFetch) {
+        return new Ember.RSVP.Promise(function(resolve) {
+          resolve(self._findAllRecordArray);
+        });
+      } else {
+        return this._findAllRecordArray;
+      }
+    }
 
     var records = this._findAllRecordArray = Ember.RecordArray.create({modelClass: this});
 
-    this.adapter.findAll(this, records);
+    var promise = this.adapter.findAll(this, records);
 
-    return records;
+    return isFetch ? promise : records;
+  },
+
+  findById: function(id) {
+    return this._findFetchById(id, false);
+  },
+
+  fetchById: function(id) {
+    return this._findFetchById(id, true);
+  },
+
+  _findFetchById: function(id, isFetch) {
+    var record = this.cachedRecordForId(id),
+        isLoaded = get(record, 'isLoaded'),
+        adapter = get(this, 'adapter'),
+        deferredOrPromise;
+
+    if (isLoaded) {
+      if (isFetch) {
+        return new Ember.RSVP.Promise(function(resolve, reject) {
+          resolve(record);
+        });
+      } else {
+        return record;
+      }
+    }
+
+    deferredOrPromise = this._fetchById(record, id);
+
+    return isFetch ? deferredOrPromise : record;
   },
 
   _currentBatchIds: null,
   _currentBatchRecordArrays: null,
-
-  findById: function(id) {
-    var record = this.cachedRecordForId(id);
-
-    if (!get(record, 'isLoaded')) {
-      this._fetchById(record, id);
-    }
-    return record;
-  },
+  _currentBatchDeferreds: null,
 
   reload: function(id) {
     var record = this.cachedRecordForId(id);
 
-    this._fetchById(record, id);
-
-    return record;
+    return this._fetchById(record, id);
   },
 
   _fetchById: function(record, id) {
-    var adapter = get(this, 'adapter');
+    var adapter = get(this, 'adapter'),
+        deferred;
 
     if (adapter.findMany && !adapter.findMany.isUnimplemented) {
       if (this._currentBatchIds) {
@@ -449,8 +534,17 @@ Ember.Model.reopenClass({
         this._currentBatchRecordArrays = [];
       }
 
+      deferred = Ember.Deferred.create();
+
+      //Attached the record to the deferred so we can resolove it later.
+      Ember.set(deferred, 'resolveWith', record);
+
+      if (!this._currentBatchDeferreds) { this._currentBatchDeferreds = []; }
+      this._currentBatchDeferreds.push(deferred);
+
       Ember.run.scheduleOnce('data', this, this._executeBatch);
-      // TODO: return a promise here
+      
+      return deferred;
     } else {
       return adapter.find(record, id);
     }
@@ -459,6 +553,7 @@ Ember.Model.reopenClass({
   _executeBatch: function() {
     var batchIds = this._currentBatchIds,
         batchRecordArrays = this._currentBatchRecordArrays,
+        batchDeferreds = this._currentBatchDeferreds,
         self = this,
         requestIds = [],
         promise,
@@ -466,6 +561,7 @@ Ember.Model.reopenClass({
 
     this._currentBatchIds = null;
     this._currentBatchRecordArrays = null;
+    this._currentBatchDeferreds = null;
 
     for (i = 0; i < batchIds.length; i++) {
       if (!this.cachedRecordForId(batchIds[i]).get('isLoaded')) {
@@ -489,15 +585,20 @@ Ember.Model.reopenClass({
       for (var i = 0, l = batchRecordArrays.length; i < l; i++) {
         batchRecordArrays[i].loadForFindMany(self);
       }
+
+      if (batchDeferreds) {
+        for (i = 0, l = batchDeferreds.length; i < l; i++) {
+          var resolveWith = Ember.get(batchDeferreds[i], 'resolveWith');
+          batchDeferreds[i].resolve(resolveWith);
+        }
+      }
+    }).then(null, function(errorXHR) {
+      if (batchDeferreds) {
+        for (var i = 0, l = batchDeferreds.length; i < l; i++) {
+          batchDeferreds[i].reject(errorXHR);
+        }
+      }
     });
-  },
-
-  findQuery: function(params) {
-    var records = Ember.RecordArray.create();
-
-    this.adapter.findQuery(this, records, params);
-
-    return records;
   },
 
   cachedRecordForId: function(id) {
@@ -511,11 +612,11 @@ Ember.Model.reopenClass({
           attrs = {isLoaded: false};
       attrs[primaryKey] = id;
       record = this.create(attrs);
+      this.recordCache[id] = record;
       var sideloadedData = this.sideloadedData && this.sideloadedData[id];
       if (sideloadedData) {
         record.load(id, sideloadedData);
       }
-      this.recordCache[id] = record;
     }
 
     return record;

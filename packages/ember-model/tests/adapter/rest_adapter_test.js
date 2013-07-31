@@ -678,3 +678,117 @@ test("Expect ajax settings to include a custom header", function() {
   equal(settings.url, RESTModel.url);
 
 });
+
+test("find with 0", function() {
+  expect(3);
+
+  var RESTModel = Ember.Model.extend({
+        id: Ember.attr(),
+        name: Ember.attr()
+      }),
+      adapter = RESTModel.adapter = Ember.RESTAdapter.create();
+
+  RESTModel.url = '/posts';
+
+  adapter._ajax = function(url, params, method) {
+    equal(url, "/posts/0.json");
+    equal(params, undefined);
+    equal(method, "GET");
+    return ajaxSuccess();
+  };
+  Ember.run(RESTModel, RESTModel.find, 0);
+});
+
+test("find() resolves with record", function() {
+  expect(1);
+
+  var data = {id: 1, name: 'Erik'},
+      record = RESTModel.create();
+  
+  RESTModel.collectionKey = undefined;
+  adapter._ajax = function(url, params, method) {
+    return ajaxSuccess(data);
+  };
+
+  adapter.find(record, 1).then(function(resolve) {
+    start();
+    ok(resolve === record, "find() resolved with record");
+  });
+  stop();
+});
+
+test("findAll() resolves with records", function() {
+  expect(1);
+
+  var data = [
+        {id: 1, name: 'Erik'},
+        {id: 2, name: 'Aaron'}
+      ],
+      records = Ember.RecordArray.create();
+  
+  RESTModel.collectionKey = undefined;
+  adapter._ajax = function(url, params, method) {
+    return ajaxSuccess(data);
+  };
+
+  adapter.findAll(RESTModel, records).then(function(resolve) {
+    start();
+    ok(resolve === records, "findAll() resolved with records");
+  });
+  stop();
+});
+
+test("findQuery() resolves with records", function() {
+  expect(1);
+
+  var data = [
+        {id: 1, name: 'Erik'},
+        {id: 2, name: 'Aaron'}
+      ],
+      records = Ember.RecordArray.create();
+  
+  RESTModel.collectionKey = undefined;
+  adapter._ajax = function(url, params, method) {
+    return ajaxSuccess(data);
+  };
+
+  adapter.findQuery(RESTModel, records, {}).then(function(resolve) {
+    start();
+    ok(resolve === records, "findQuery() resolved with records");
+  });
+  stop();
+});
+
+test("createRecord() resolves with record", function() {
+  expect(1);
+
+  var data = {id: 1, name: 'Erik'},
+      record = RESTModel.create();
+  
+  RESTModel.rootKey = undefined;
+  adapter._ajax = function(url, params, method) {
+    return ajaxSuccess(data);
+  };
+  adapter.createRecord(record).then(function(resolve) {
+    start();
+    ok(resolve === record, "createRecord() resolved with record");
+  });
+  stop();
+});
+
+test("saveRecord() resolves with record", function() {
+  expect(1);
+
+  var data = {id: 1, name: 'Erik'},
+      record = RESTModel.create({name: 'Ray'});
+  
+  RESTModel.rootKey = undefined;
+  adapter._ajax = function(url, params, method) {
+    return ajaxSuccess(data);
+  };
+  adapter.saveRecord(record).then(function(resolve) {
+    start();
+    ok(resolve === record, "saveRecord() resolved with record");
+  });
+  stop();
+});
