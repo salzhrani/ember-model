@@ -321,7 +321,7 @@ Ember.Model = Ember.Object.extend(Ember.Evented, {
     var i;
     for(i = 0; i < this._hasManyArrays.length; i++) {
       var array = this._hasManyArrays[i];
-      set(array, 'content', this._getHasManyContent(get(array, 'key'), get(array, 'modelClass'), get(array, 'embedded')));
+      set(array, 'content', this._getHasManyContent(get(array, 'key'), get(array, 'modelClass'), get(array, 'embedded'), get(array, 'polymorphic')));
     }
   },
 
@@ -336,8 +336,8 @@ Ember.Model = Ember.Object.extend(Ember.Evented, {
         {
           var adapter = this;
           mapFunction = function(attrs) {
-             var subKlass = type.adapter.findClassFor(attrs.type);
-            reference = Ember.get(subKlass)._referenceForId(attrs[primaryKey]);
+            var subKlass = type.adapter.findClassFor(attrs.type);
+            reference = subKlass._referenceForId(attrs[primaryKey]);
             reference.data = attrs;
             return reference;
           };
@@ -355,7 +355,7 @@ Ember.Model = Ember.Object.extend(Ember.Evented, {
         {
           mapFunction = function(id) {
             var subKlass = type.adapter.findClassFor(id.type);
-            return Ember.get(subKlass)._referenceForId(id.id);
+            return subKlass._referenceForId(id.id);
          };
        }
        else
@@ -707,7 +707,7 @@ Ember.Model.reopenClass({
     var reference = {
       id: id,
       clientId: this._clientIdCounter++,
-      model : this.toString()
+      model : this
     };
 
     // if we're creating an item, this process will be done

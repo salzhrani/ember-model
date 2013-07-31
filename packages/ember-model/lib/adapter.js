@@ -32,6 +32,9 @@ Ember.Adapter = Ember.Object.extend({
   },
   findClassFor : function(alias) {
     var aliasMap = get(this, 'aliasMap');
-    return aliasMap[alias];
+    var klass = aliasMap[alias];
+    if(typeof klass == "string")
+      klass = get(Ember.lookup,klass);
+    return klass;
   }
 });
